@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chess Notation Trainer</title>
+<meta name="description" content="Learn chess notation by doing: square-name drills, decoding algebraic moves, and reading a real game score. Works offline from file://.">
+<style>
+  :root {
+    --bg: #fdfcf8;
+    --ink: #24211c;
+    --muted: #5c5648;
+    --accent: #1c5d99;
+    --accent-ink: #ffffff;
+    --good: #1d7a3a;
+    --bad: #a0361d;
+    --card: #ffffff;
+    --border: #d8d2c4;
+    --sq-light: #f0d9b5;
+    --sq-dark: #b58863;
+    --ring: #d95d00;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 1rem; }
+  header.site h1 { font-size: 1.4rem; margin: 0.2rem 0; }
+  header.site p.lead { margin: 0.2rem 0 0.6rem; color: var(--muted); }
+  .streak-badge {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--card);
+    font-weight: 600;
+  }
+  nav.tabs { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.6rem 0 1rem; }
+  nav.tabs button {
+    font: inherit;
+    padding: 0.5rem 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  nav.tabs button[aria-selected="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+    font-weight: 700;
+  }
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible {
+    outline: 3px solid var(--ring);
+    outline-offset: 2px;
+  }
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  .panel[hidden] { display: none; }
+  .layout { display: grid; grid-template-columns: minmax(260px, 400px) 1fr; gap: 1rem; align-items: start; }
+  @media (max-width: 720px) { .layout { grid-template-columns: 1fr; } }
+
+  .board-wrap { position: relative; width: 100%; max-width: 400px; }
+  .board {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    aspect-ratio: 1 / 1;
+    width: 100%;
+    border: 2px solid #6b5b45;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .square {
+    display: flex; align-items: center; justify-content: center;
+    font-size: clamp(1rem, 4.5vw, 1.8rem);
+    line-height: 1;
+    user-select: none;
+  }
+  .square.light { background: var(--sq-light); }
+  .square.dark  { background: var(--sq-dark); }
+  .square .piece { color: #1a1a1a; text-shadow:
+      1px 1px 0 #f0d9b5, -1px 1px 0 #f0d9b5, 1px -1px 0 #f0d9b5, -1px -1px 0 #f0d9b5,
+      0 1.5px 0 #f0d9b5, 0 -1.5px 0 #f0d9b5, 1.5px 0 0 #f0d9b5, -1.5px 0 0 #f0d9b5; }
+  .square.w-piece .piece { color: #ffffff; text-shadow:
+      0 0 2px #333, 1px 1px 0 #444, -1px -1px 0 #444, 1px -1px 0 #444, -1px 1px 0 #444; }
+  .square.mark { box-shadow: inset 0 0 0 0.22em var(--ring); }
+  .square.mark-target { box-shadow: inset 0 0 0 0.22em var(--accent); }
+  .square.cursor { box-shadow: inset 0 0 0 0.12em #111827, inset 0 0 0 0.2em #ffffff; }
+  .board.pickable .square { cursor: pointer; }
+  .board-wrap svg.arrows {
+    position: absolute; top: 0; left: 0;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    pointer-events: none;
+  }
+  .coords {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    font-size: 0.75rem;
+    color: var(--muted);
+    text-align: center;
+    padding-top: 2px;
+    max-width: 400px;
+  }
+
+  h2 { font-size: 1.15rem; margin-top: 0; }
+  .question { font-size: 1.12rem; font-weight: 700; min-height: 3.4em; }
+  .answer-row { display: flex; gap: 0.5rem; margin-top: 0.6rem; flex-wrap: wrap; align-items: center; }
+  .answer-row input {
+    font: inherit;
+    font-family: ui-monospace, Consolas, monospace;
+    letter-spacing: 0.08em;
+    text-transform: lowercase;
+    padding: 0.5rem 0.6rem;
+    width: 8em;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  button.primary {
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    color: var(--accent-ink);
+    font-weight: 700;
+    padding: 0.5rem 0.9rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: inherit;
+  }
+  button.secondary {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--ink);
+    padding: 0.5rem 0.7rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: inherit;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .feedback { margin-top: 0.6rem; font-weight: 700; min-height: 1.4em; }
+  .feedback.good { color: var(--good); }
+  .feedback.bad  { color: var(--bad); }
+  .scoreline { color: var(--muted); font-size: 0.95rem; }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px;
+    padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  .score-moves { list-style: none; margin: 0.5rem 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.25rem; font-family: ui-monospace, Consolas, monospace; }
+  .score-moves button {
+    font: inherit;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--ink);
+    padding: 0.15rem 0.4rem;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .score-moves button.current { background: var(--accent); color: var(--accent-ink); font-weight: 700; border-color: var(--accent); }
+  .game-meta { color: var(--muted); }
+  kbd {
+    font-family: ui-monospace, Consolas, monospace;
+    background: #f1eee6;
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    padding: 0 0.35em;
+    font-size: 0.9em;
+  }
+  footer.sitefoot { color: var(--muted); font-size: 0.9rem; padding: 1rem 0 2rem; }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="site">
+    <h1>Chess Notation Trainer</h1>
+    <p class="lead">Learn chess notation by doing &mdash; name squares, decode moves, and read a real game. Works offline, keyboard-friendly.</p>
+    <p><span class="streak-badge" id="streak-badge">Streak: 0</span></p>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button role="tab" id="tab-drills" aria-controls="panel-drills" aria-selected="true">Drills</button>
+      <button role="tab" id="tab-games"  aria-controls="panel-games"  aria-selected="false" tabindex="-1">Read a game</button>
+      <button role="tab" id="tab-daily"  aria-controls="panel-daily"  aria-selected="false" tabindex="-1">Daily drill (5 min)</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ============ DRILLS ============ -->
+    <section class="panel" id="panel-drills" role="tabpanel" aria-labelledby="tab-drills">
+      <div class="layout">
+        <div class="board-wrap" id="drill-board-wrap" tabindex="0"
+             aria-label="Chessboard. This picture backs up the question in text. On a keyboard, type your answer in the answer box.">
+          <div class="board" id="drill-board"></div>
+          <svg class="arrows" id="drill-arrows" viewBox="0 0 800 800" aria-hidden="true"></svg>
+          <div class="coords" aria-hidden="true">
+            <span>a</span><span>b</span><span>c</span><span>d</span><span>e</span><span>f</span><span>g</span><span>h</span>
+          </div>
+        </div>
+        <div>
+          <h2>Practice</h2>
+          <p>
+            <label for="drill-mode">Drill type: </label>
+            <select id="drill-mode">
+              <option value="square">Name the square</option>
+              <option value="decode">Decode a move</option>
+            </select>
+          </p>
+          <p class="question" id="drill-question" aria-live="polite">Loading&hellip;</p>
+          <form class="answer-row" id="drill-form">
+            <label for="drill-answer" class="sr-only">Answer (a letter a to h and a number 1 to 8)</label>
+            <input id="drill-answer" name="answer" autocomplete="off" spellcheck="false"
+                   maxlength="6" placeholder="e.g. e4">
+            <button class="primary" type="submit">Answer</button>
+            <button class="secondary" type="button" id="drill-skip">Skip</button>
+          </form>
+          <p class="feedback" id="drill-feedback" aria-live="assertive"></p>
+          <p class="scoreline" id="drill-score">0 correct of 0</p>
+          <p class="scoreline">
+            Type the square name &mdash; a letter from <kbd>a</kbd> to <kbd>h</kbd> and a number from <kbd>1</kbd> to <kbd>8</kbd>,
+            like <kbd>e4</kbd> &mdash; then press <kbd>Enter</kbd>. You can also click or tap a square,
+            or focus the board and press <kbd>Enter</kbd> to type there.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ READ A GAME ============ -->
+    <section class="panel" id="panel-games" role="tabpanel" aria-labelledby="tab-games" hidden>
+      <div class="layout">
+        <div class="board-wrap" tabindex="0" aria-label="Chessboard. This picture backs up the game in text; move descriptions are listed to the right.">
+          <div class="board" id="game-board"></div>
+          <svg class="arrows" id="game-arrows" viewBox="0 0 800 800" aria-hidden="true"></svg>
+          <div class="coords" aria-hidden="true">
+            <span>a</span><span>b</span><span>c</span><span>d</span><span>e</span><span>f</span><span>g</span><span>h</span>
+          </div>
+        </div>
+        <div>
+          <h2>Read the score, line by line</h2>
+          <p>
+            <label for="game-select">Game: </label>
+            <select id="game-select"></select>
+          </p>
+          <p class="game-meta" id="game-meta" aria-live="polite"></p>
+          <div class="answer-row" role="group" aria-label="Playback controls">
+            <button class="secondary" id="gm-first">&#9198; Start</button>
+            <button class="secondary" id="gm-prev"  aria-label="Previous move">&#9664; Back</button>
+            <button class="secondary" id="gm-next"  aria-label="Next move">Next &#9654;</button>
+            <button class="secondary" id="gm-last">&#9197; End</button>
+          </div>
+          <p class="scoreline" id="game-position-desc" aria-live="polite">Starting position.</p>
+          <ol class="score-moves" id="game-moves"></ol>
+          <p class="scoreline">
+            Keyboard: <kbd>&#8592;</kbd> / <kbd>&#8594;</kbd> step backward and forward,
+            <kbd>Home</kbd> and <kbd>End</kbd> jump to the start or finish of the game.
+            The latest move is drawn on the board with an arrow.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ DAILY DRILL ============ -->
+    <section class="panel" id="panel-daily" role="tabpanel" aria-labelledby="tab-daily" hidden>
+      <div class="layout">
+        <div class="board-wrap" id="daily-board-wrap" tabindex="0"
+             aria-label="Chessboard. This picture backs up the question in text. On a keyboard, type your answer in the answer box.">
+          <div class="board" id="daily-board"></div>
+          <svg class="arrows" id="daily-arrows" viewBox="0 0 800 800" aria-hidden="true"></svg>
+          <div class="coords" aria-hidden="true">
+            <span>a</span><span>b</span><span>c</span><span>d</span><span>e</span><span>f</span><span>g</span><span>h</span>
+          </div>
+        </div>
+        <div>
+          <h2>Five minutes a day</h2>
+          <p id="daily-intro">
+            A short, friendly session mixing both drill types. Finish the whole
+            five minutes to keep your streak going &mdash; it counts once per day.
+          </p>
+          <div class="answer-row">
+            <button class="primary" id="daily-start">Start 5-minute drill</button>
+            <button class="secondary" id="daily-end" disabled>End session early</button>
+          </div>
+          <p class="question" id="daily-question" aria-live="polite">Press start to begin.</p>
+          <form class="answer-row" id="daily-form">
+            <label for="daily-answer" class="sr-only">Answer (a letter a to h and a number 1 to 8)</label>
+            <input id="daily-answer" autocomplete="off" spellcheck="false"
+                   maxlength="6" placeholder="e.g. e4" disabled>
+            <button class="primary" type="submit" disabled>Answer</button>
+          </form>
+          <p class="feedback" id="daily-feedback" aria-live="assertive"></p>
+          <p class="scoreline" id="daily-status">Timer: 5:00 &middot; 0 correct of 0</p>
+          <p class="scoreline" id="daily-summary"></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="sitefoot">
+    <p>Chess Notation Trainer &middot; a free, offline practice tool &middot; MIT License &middot;
+    Built by Asdale Dynamics, LLC.</p>
+    <noscript><p>This app needs JavaScript enabled to run.</p></noscript>
+  </footer>
+</div>
+
+<script id="app-core">
+"use strict";
+/* ──────────────────────────────────────────────────────────────────────────
+   Pure logic: squares, SAN parsing, board application, game replay, streaks.
+   No DOM access here, so tests can run this script in Node.
+   Board layout: index 0 = a8 ... 63 = h1. Rows go from rank 8 down to rank 1.
+   ────────────────────────────────────────────────────────────────────────── */
+
+var FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
+
+function squareToIndex(name) {
+  var m = typeof name === "string" ? /^([a-h])([1-8])$/.exec(name) : null;
+  if (!m) return -1;
+  return (8 - parseInt(m[2], 10)) * 8 + FILES.indexOf(m[1]);
+}
+
+function indexToSquare(i) {
+  if (!(i >= 0 && i <= 63)) return null;
+  return FILES[i % 8] + String(8 - (i >> 3));
+}
+
+function isDarkSquare(name) {
+  if (!/^[a-h][1-8]$/.test(name)) return null;
+  var m = /^([a-h])([1-8])$/.exec(name);
+  return (FILES.indexOf(m[1]) + parseInt(m[2], 10)) % 2 === 1;
+}
+
+function indexFile(i) { return i % 8; }
+function indexRow(i) { return i >> 3; }   /* 0 = rank 8 … 7 = rank 1 */
+function indexRank(i) { return 8 - (i >> 3); }
+
+/* Descriptors for every square, in visual order (a8 first, h1 last). */
+function renderSquares() {
+  var out = [];
+  for (var i = 0; i < 64; i++) {
+    out.push({
+      index: i,
+      name: indexToSquare(i),
+      dark: isDarkSquare(indexToSquare(i)),
+      file: FILES[i % 8],
+      rank: indexRank(i)
+    });
+  }
+  return out;
+}
+
+/* Parse one SAN token ("Nf3", "exd5", "O-O", "b8=Q", "Rdd1+!"). */
+function parseSan(raw) {
+  if (typeof raw !== "string") return null;
+  var san = raw.replace(/[+#!?]+$/, "").trim();
+  if (san === "0-0") san = "O-O";
+  if (san === "0-0-0") san = "O-O-O";
+  if (san === "O-O") return { castle: "K" };
+  if (san === "O-O-O") return { castle: "Q" };
+  var m = /^([KQRBN])?([a-h])?([1-8])?(x)?([a-h][1-8])(?:=([QRBN]))?$/.exec(san);
+  if (!m) return null;
+  return {
+    piece: m[1] || "P",
+    fromFile: m[2] === undefined ? null : FILES.indexOf(m[2]),
+    fromRank: m[3] === undefined ? null : parseInt(m[3], 10),
+    capture: !!m[4],
+    target: squareToIndex(m[5]),
+    promotion: m[6] || null
+  };
+}
+
+function initialBoard() {
+  var b = new Array(64);
+  var back = ["R", "N", "B", "Q", "K", "B", "N", "R"];
+  for (var j = 0; j < 64; j++) b[j] = null;
+  for (var i = 0; i < 8; i++) {
+    b[i] = { c: "b", t: back[i] };
+    b[8 + i] = { c: "b", t: "P" };
+    b[48 + i] = { c: "w", t: "P" };
+    b[56 + i] = { c: "w", t: back[i] };
+  }
+  return b;
+}
+
+function onBoard(i) { return i >= 0 && i <= 63; }
+
+/* Pseudo-legal destination squares for one piece. epIndex: en-passant target. */
+function pseudoTargets(board, idx, epIndex) {
+  var p = board[idx];
+  if (!p) return [];
+  var f = indexFile(idx), r = indexRow(idx), out = [], dirs, d, fi, ri, ti, q;
+  function square(fi, ri) { return ri * 8 + fi; }
+
+  if (p.t === "N" || p.t === "K") {
+    dirs = p.t === "N"
+      ? [[1, 2], [2, 1], [2, -1], [1, -2], [-1, -2], [-2, -1], [-2, 1], [-1, 2]]
+      : [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
+    for (d = 0; d < dirs.length; d++) {
+      fi = f + dirs[d][0]; ri = r + dirs[d][1];
+      if (fi < 0 || fi > 7 || ri < 0 || ri > 7) continue;
+      q = board[square(fi, ri)];
+      if (!q || q.c !== p.c) out.push(square(fi, ri));
+    }
+    return out;
+  }
+
+  if (p.t === "R" || p.t === "B" || p.t === "Q") {
+    dirs = p.t === "R" ? [[1, 0], [-1, 0], [0, 1], [0, -1]]
+         : p.t === "B" ? [[1, 1], [1, -1], [-1, 1], [-1, -1]]
+         : [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+    for (d = 0; d < dirs.length; d++) {
+      var df = dirs[d][0], dr = dirs[d][1];
+      fi = f + df; ri = r + dr;
+      while (fi >= 0 && fi <= 7 && ri >= 0 && ri <= 7) {
+        q = board[square(fi, ri)];
+        if (!q) { out.push(square(fi, ri)); }
+        else { if (q.c !== p.c) out.push(square(fi, ri)); break; }
+        fi += df; ri += dr;
+      }
+    }
+    return out;
+  }
+
+  /* Pawn: one rank up means one row less, i.e. -8 for white, +8 for black. */
+  var step = p.c === "w" ? -8 : 8;
+  if (onBoard(idx + step) && !board[idx + step]) {
+    out.push(idx + step);
+    var startIdx = p.c === "w" ? (idx >= 48 && idx <= 55) : (idx >= 8 && idx <= 15);
+    if (startIdx && onBoard(idx + 2 * step) && !board[idx + 2 * step]) out.push(idx + 2 * step);
+  }
+  for (var cf = -1; cf <= 1; cf += 2) {
+    if (f + cf < 0 || f + cf > 7) continue;
+    ti = idx + step + cf;
+    if (!onBoard(ti)) continue;
+    q = board[ti];
+    if (q && q.c !== p.c) out.push(ti);
+    else if (!q && epIndex !== undefined && epIndex === ti) out.push(ti);
+  }
+  return out;
+}
+
+function findKing(board, color) {
+  for (var i = 0; i < 64; i++) {
+    if (board[i] && board[i].c === color && board[i].t === "K") return i;
+  }
+  return -1;
+}
+
+/* Is square idx attacked by any piece of byColor? (attack, not capture legality) */
+function attacked(board, idx, byColor) {
+  var f = indexFile(idx), r = indexRow(idx), i, p, pf, pr, d;
+  var knight = [[1, 2], [2, 1], [2, -1], [1, -2], [-1, -2], [-2, -1], [-2, 1], [-1, 2]];
+  for (i = 0; i < 64; i++) {
+    p = board[i];
+    if (!p || p.c !== byColor) continue;
+    pf = indexFile(i); pr = indexRow(i);
+    if (p.t === "K") {
+      if (Math.abs(pf - f) <= 1 && Math.abs(pr - r) <= 1) return true;
+    } else if (p.t === "N") {
+      for (d = 0; d < knight.length; d++) {
+        if (pf + knight[d][0] === f && pr + knight[d][1] === r) return true;
+      }
+    } else if (p.t === "P") {
+      var dir = p.c === "w" ? -1 : 1;       /* pawns capture one rank forward (visual) */
+      if (pr + dir === r && Math.abs(pf - f) === 1) return true;
+    } else {
+      var df = f - pf, dr = r - pr;
+      var onLine = (df === 0 || dr === 0) && !(df === 0 && dr === 0);
+      var onDiag = Math.abs(df) === Math.abs(dr) && df !== 0;
+      if (p.t === "R" && !onLine) continue;
+      if (p.t === "B" && !onDiag) continue;
+      if (p.t === "Q" && !onLine && !onDiag) continue;
+      var sf = df === 0 ? 0 : (df > 0 ? 1 : -1);
+      var sr = dr === 0 ? 0 : (dr > 0 ? 1 : -1);
+      var cf = pf + sf, cr = pr + sr, clear = true;
+      while (cf !== f || cr !== r) {
+        if (board[cr * 8 + cf]) { clear = false; break; }
+        cf += sf; cr += sr;
+      }
+      if (clear) return true;
+    }
+  }
+  return false;
+}
+
+/* Apply one SAN move to a copy of the board. side: "w" or "b".
+   Returns null if unparseable/illegal, else { board, from, to, castle,
+   captured, promotion }. */
+function applySan(board, san, side, epIndex) {
+  var parsed = parseSan(san);
+  if (!parsed) return null;
+
+  if (parsed.castle) {
+    var base = side === "w" ? 56 : 0;
+    var kingFrom = base + 4, rookFrom, kingTo, rookTo;
+    if (parsed.castle === "K") { rookFrom = base + 7; kingTo = base + 6; rookTo = base + 5; }
+    else { rookFrom = base + 0; kingTo = base + 2; rookTo = base + 3; }
+    var k = board[kingFrom], rk = board[rookFrom];
+    if (!k || k.c !== side || k.t !== "K") return null;
+    if (!rk || rk.c !== side || rk.t !== "R") return null;
+    var b0 = board.slice();
+    b0[kingTo] = k; b0[kingFrom] = null;
+    b0[rookTo] = rk; b0[rookFrom] = null;
+    return { board: b0, from: kingFrom, to: kingTo, castle: parsed.castle, captured: null, promotion: null };
+  }
+
+  var candidates = [];
+  for (var i = 0; i < 64; i++) {
+    var p = board[i];
+    if (!p || p.c !== side || p.t !== parsed.piece) continue;
+    if (parsed.fromFile !== null && indexFile(i) !== parsed.fromFile) continue;
+    if (parsed.fromRank !== null && indexRank(i) !== parsed.fromRank) continue;
+    if (pseudoTargets(board, i, epIndex).indexOf(parsed.target) !== -1) candidates.push(i);
+  }
+  if (candidates.length === 0) return null;
+
+  /* Prefer a candidate that leaves our own king safe (handles checks/pins);
+     fall back to the first candidate so authored games always replay. */
+  var chosen = candidates[0];
+  for (var c = 0; c < candidates.length; c++) {
+    var sim = board.slice();
+    var moving = sim[candidates[c]];
+    sim[candidates[c]] = null;
+    sim[parsed.target] = moving;
+    var kingIdx = findKing(sim, side);
+    if (!attacked(sim, kingIdx, side === "w" ? "b" : "w")) { chosen = candidates[c]; break; }
+  }
+
+  var b = board.slice();
+  var moving2 = b[chosen];
+  var captured = null;
+  if (parsed.piece === "P" && !b[parsed.target] && indexFile(chosen) !== indexFile(parsed.target)) {
+    /* en passant: the captured pawn is one rank closer, i.e. +8 (white) or -8 */
+    var epCap = parsed.target + (side === "w" ? 8 : -8);
+    captured = b[epCap];
+    b[epCap] = null;
+  } else {
+    captured = b[parsed.target];
+  }
+  b[parsed.target] = (moving2.t === "P" && parsed.promotion) ? { c: side, t: parsed.promotion } : moving2;
+  b[chosen] = null;
+  return { board: b, from: chosen, to: parsed.target, castle: null, captured: captured, promotion: parsed.promotion };
+}
+
+/* Movetext -> SAN tokens (numbers, flair, results removed). */
+function parseMovetext(text) {
+  var tokens = [], raw = String(text).replace(/\{[^}]*\}/g, " ").split(/\s+/);
+  for (var i = 0; i < raw.length; i++) {
+    var t = raw[i];
+    if (!t) continue;
+    if (t === "1-0" || t === "0-1" || t === "1/2-1/2" || t === "*") continue;
+    var s = t.replace(/^[0-9]+\.+/, "");
+    if (!s || /^\d+$/.test(s)) continue;
+    tokens.push(s);
+  }
+  return tokens;
+}
+
+/* Replay movetext from the starting position into per-ply snapshots. */
+function replayGame(movetext) {
+  var sans = parseMovetext(movetext);
+  var board = initialBoard(), side = "w", plies = [];
+  for (var i = 0; i < sans.length; i++) {
+    var meta = applySan(board, sans[i], side);
+    if (!meta) return { ok: false, failed: sans[i], ply: i, plies: plies };
+    plies.push({
+      san: sans[i], side: side, from: meta.from, to: meta.to,
+      boardBefore: board, boardAfter: meta.board,
+      promotion: meta.promotion, castle: meta.castle
+    });
+    board = meta.board;
+    side = side === "w" ? "b" : "w";
+  }
+  return { ok: true, plies: plies, finalBoard: board };
+}
+
+/* ---------- Sample games to read (public-domain classics) ---------- */
+var GAMES = [
+  {
+    title: "The Opera Game",
+    players: "Paul Morphy vs the Duke of Brunswick and Count Isouard",
+    place: "Paris, 1858",
+    result: "1-0",
+    movetext:
+      "1.e4 e5 2.Nf3 d6 3.d4 Bg4 4.dxe5 Bxf3 5.Qxf3 dxe5 6.Bc4 Nf6 7.Qb3 Qe7 8.Nc3 c6 " +
+      "9.Bg5 b5 10.Nxb5 cxb5 11.Bxb5+ Nbd7 12.O-O-O Rd8 13.Rxd7 Rxd7 14.Rd1 Qe6 15.Bxd7+ " +
+      "Nxd7 16.Qb8+ Nxb8 17.Rd8# 1-0"
+  },
+  {
+    title: "The immortal king walk",
+    players: "Edward Lasker vs George Thomas",
+    place: "London, 1912",
+    result: "1-0",
+    movetext:
+      "1.d4 e6 2.Nf3 f5 3.Nc3 Nf6 4.Bg5 Be7 5.Bxf6 Bxf6 6.e4 fxe4 7.Nxe4 b6 8.Ne5 O-O " +
+      "9.Bd3 Bb7 10.Qh5 Qe7 11.Qxh7+ Kxh7 12.Nxf6+ Kh6 13.Neg4+ Kg5 14.h4+ Kf4 15.g3+ " +
+      "Kf3 16.Be2+ Kg2 17.Rh2+ Kg1 18.Kd2# 1-0"
+  },
+  {
+    title: "The fastest way to lose",
+    players: "A cautionary tale",
+    place: "Anywhere, any year",
+    result: "0-1",
+    note: "An honest look at why careless pawn moves lose instantly.",
+    movetext: "1.f3 e5 2.g4 Qh4# 0-1"
+  }
+];
+
+/* ---------- Daily streak (pure; storage lives in the UI) ---------- */
+function dateStr(d) {
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") +
+    "-" + String(d.getDate()).padStart(2, "0");
+}
+function prevDateStr(today) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(today);
+  if (!m) return null;
+  var d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+  d.setDate(d.getDate() - 1);
+  return dateStr(d);
+}
+function updateStreak(state, today) {
+  var s = state && typeof state === "object" ? state : {};
+  var streak = typeof s.streak === "number" ? s.streak : 0;
+  var last = typeof s.lastDate === "string" ? s.lastDate : null;
+  var yesterday = prevDateStr(today);
+  if (last !== today && last === yesterday) {
+    return { streak: streak + 1, lastDate: today };
+  }
+  if (last === today) return { streak: streak, lastDate: last };
+  return { streak: 1, lastDate: today };
+}
+
+var CORE_EXPORTS = {
+  FILES: FILES,
+  squareToIndex: squareToIndex,
+  indexToSquare: indexToSquare,
+  isDarkSquare: isDarkSquare,
+  indexFile: indexFile,
+  indexRow: indexRow,
+  indexRank: indexRank,
+  renderSquares: renderSquares,
+  parseSan: parseSan,
+  initialBoard: initialBoard,
+  pseudoTargets: pseudoTargets,
+  findKing: findKing,
+  attacked: attacked,
+  applySan: applySan,
+  parseMovetext: parseMovetext,
+  replayGame: replayGame,
+  GAMES: GAMES,
+  dateStr: dateStr,
+  prevDateStr: prevDateStr,
+  updateStreak: updateStreak
+};
+if (typeof window !== "undefined") window.CHESS_CORE = CORE_EXPORTS;
+if (typeof module !== "undefined" && module.exports) module.exports = CORE_EXPORTS;
+</script>
+
+<script id="app-ui">
+"use strict";
+/* ──────────────────────────────────────────────────────────────────────
+   UI wiring. Uses CHESS_CORE (set above) for all chess logic.
+   ────────────────────────────────────────────────────────────────────── */
+var C = window.CHESS_CORE;
+var PIECE_GLYPH = { K: "\u265A", Q: "\u265B", R: "\u265C", B: "\u265D", N: "\u265E", P: "\u265F" };
+
+/* ---------- storage (localStorage with an in-memory fallback) ---------- */
+var STORE_KEY = "chess-notation-trainer-v1";
+var memStore = {};
+function loadState() {
+  try {
+    var raw = window.localStorage.getItem(STORE_KEY);
+    if (!raw) return {};
+    var v = JSON.parse(raw);
+    return v && typeof v === "object" ? v : {};
+  } catch (e) { return memStore.state || {}; }
+}
+function saveState(state) {
+  try { window.localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+  catch (e) { memStore.state = state; }
+}
+
+function todayStr() { return C.dateStr(new Date()); }
+function updateStreakBadge() {
+  var s = loadState();
+  var streak = (typeof s.streak === "number" && s.lastDate === todayStr()) ? s.streak
+             : (typeof s.streak === "number" ? s.streak : 0);
+  document.getElementById("streak-badge").textContent = "Streak: " + streak + (streak === 1 ? " day" : " days");
+}
+
+/* ---------- board rendering ---------- */
+function boardDiv(boardEl, state) {
+  var opts = state || {};
+  boardEl.textContent = null;
+  var squares = C.renderSquares();
+  for (var i = 0; i < squares.length; i++) {
+    var s = squares[i];
+    var div = document.createElement("div");
+    div.className = "square " + (s.dark ? "dark" : "light");
+    var piece = opts.board ? opts.board[s.index] : null;
+    if (piece) {
+      var span = document.createElement("span");
+      span.className = "piece";
+      span.textContent = PIECE_GLYPH[piece.t];
+      span.setAttribute("aria-hidden", "true");
+      div.appendChild(span);
+      if (piece.c === "w") div.classList.add("w-piece");
+    }
+    div.dataset.square = s.name;
+    if (opts.mark === s.index) div.classList.add("mark");
+    if (opts.markTarget === s.index) div.classList.add("mark-target");
+    if (opts.cursor === s.index) div.classList.add("cursor");
+    boardEl.appendChild(div);
+  }
+  return div;
+}
+
+function setArrow(svgEl, fromIdx, toIdx) {
+  svgEl.textContent = null;
+  if (fromIdx === null || toIdx === null) return;
+  function cx(i) { return (indexFileSafe(i) + 0.5) * 100; }
+  function cy(i) { return ((i >> 3) + 0.5) * 100; }
+  function indexFileSafe(i) { return i % 8; }
+  var x1 = cx(fromIdx), y1 = cy(fromIdx), x2 = cx(toIdx), y2 = cy(toIdx);
+  /* shorten the line so it starts/ends near the piece centers */
+  var dx = x2 - x1, dy = y2 - y1, len = Math.sqrt(dx * dx + dy * dy) || 1;
+  var pad = 14;
+  x1 += dx / len * pad; y1 += dy / len * pad;
+  x2 -= dx / len * pad; y2 -= dy / len * pad;
+  svgEl.setAttribute("aria-hidden", "true");
+  var line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", x1); line.setAttribute("y1", y1);
+  line.setAttribute("x2", x2); line.setAttribute("y2", y2);
+  line.setAttribute("stroke", "rgba(217, 93, 0, 0.92)");
+  line.setAttribute("stroke-width", "14");
+  line.setAttribute("stroke-linecap", "round");
+  svgEl.appendChild(line);
+  var head = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+  var hx = x2 + dx / len * 18, hy = y2 + dy / len * 18;
+  var ax = -dx / len, ay = -dy / len;
+  var px = -dy / len, py = dx / len;
+  function pt(a, b) { return a.toFixed(1) + "," + b.toFixed(1); }
+  head.setAttribute("points",
+    pt(hx, hy) + " " + pt(x2 + ax * 4 + px * 11, y2 + ay * 4 + py * 11) + " " +
+    pt(x2 + ax * 4 - px * 11, y2 + ay * 4 - py * 11));
+  head.setAttribute("fill", "rgba(217, 93, 0, 0.92)");
+  svgEl.appendChild(head);
+}
+
+/* Click + keyboard-cursor support for an interactive board */
+function wireBoardPick(wrapEl, boardEl, onPick) {
+  boardEl.classList.add("pickable");
+  boardEl.addEventListener("click", function (ev) {
+    var sq = ev.target && ev.target.closest ? ev.target.closest(".square") : null;
+    if (sq && sq.dataset.square) onPick(sq.dataset.square);
+  });
+  var cursor = -1;
+  wrapEl.addEventListener("keydown", function (ev) {
+    var key = ev.key;
+    if (key === "Enter" || key === " ") {
+      ev.preventDefault();
+      if (cursor >= 0) onPick(C.indexToSquare(cursor));
+      return;
+    }
+    var moves = { ArrowRight: 1, ArrowLeft: -1, ArrowUp: 8, ArrowDown: -8 };
+    if (!moves[key]) return;
+    ev.preventDefault();
+    if (cursor === -1) cursor = 56; /* a1 */
+    var next = cursor + moves[key];
+    if (key === "ArrowRight" && C.indexFile(cursor) === 7) return;
+    if (key === "ArrowLeft" && C.indexFile(cursor) === 0) return;
+    if (key === "ArrowUp" && C.indexRow(cursor) === 0) return;
+    if (key === "ArrowDown" && C.indexRow(cursor) === 7) return;
+    if (next < 0 || next > 63) return;
+    cursor = next;
+    var squares = boardEl.children;
+    for (var i = 0; i < squares.length; i++) squares[i].classList.toggle("cursor", i === cursor);
+  });
+  wrapEl.addEventListener("blur", function () {
+    var squares = boardEl.children;
+    for (var i = 0; i < squares.length; i++) squares[i].classList.remove("cursor");
+    cursor = -1;
+  }, true);
+}
+
+/* ---------- tabs ---------- */
+var TAB_IDS = ["drills", "games", "daily"];
+function showTab(name) {
+  TAB_IDS.forEach(function (t) {
+    document.getElementById("tab-" + t).setAttribute("aria-selected", t === name ? "true" : "false");
+    document.getElementById("tab-" + t).tabIndex = t === name ? 0 : -1;
+    document.getElementById("panel-" + t).hidden = t !== name;
+  });
+  if (name === "drills") nextDrill();
+  if (name === "games") renderGame();
+}
+TAB_IDS.forEach(function (t) {
+  document.getElementById("tab-" + t).addEventListener("click", function () { showTab(t); });
+});
+document.querySelector(".tabs").addEventListener("keydown", function (ev) {
+  var idx = TAB_IDS.indexOf(currentTab);
+  if (ev.key === "ArrowRight") { ev.preventDefault(); showTab(TAB_IDS[(idx + 1) % TAB_IDS.length]); }
+  if (ev.key === "ArrowLeft") { ev.preventDefault(); showTab(TAB_IDS[(idx + TAB_IDS.length - 1) % TAB_IDS.length]); }
+});
+
+/* ---------- shared drill question machinery ---------- */
+function randomSquareName() {
+  return C.indexToSquare(Math.floor(Math.random() * 64));
+}
+function makeSquareQuestion() {
+  var name = randomSquareName();
+  return {
+    kind: "square",
+    prompt: "Which square is highlighted? (It is " + colorWord(name) + ".)",
+    answer: name,
+    board: null,
+    mark: C.squareToIndex(name),
+    revealFrom: null, revealTo: null
+  };
+}
+function makeDecodeQuestion() {
+  var games = replayCache;
+  var gi = Math.floor(Math.random() * games.length);
+  var plies = games[gi].plies;
+  var pi = Math.floor(Math.random() * plies.length);
+  var ply = plies[pi];
+  return {
+    kind: "decode",
+    prompt: "The move is \u201C" + ply.san + "\u201D (" + (ply.side === "w" ? "White" : "Black") +
+      " to move). Which square does it land on?",
+    answer: C.indexToSquare(ply.to),
+    board: ply.boardBefore,
+    mark: null,
+    revealFrom: ply.from, revealTo: ply.to
+  };
+}
+function colorWord(name) {
+  return C.isDarkSquare(name) ? "a dark square" : "a light square";
+}
+function normalizeAnswer(raw) {
+  return String(raw || "").toLowerCase().replace(/[^a-h1-8]/g, "");
+}
+function isAnswerFormat(ok) { return /^[a-h][1-8]$/.test(ok); }
+
+/* ---------- Drills panel ---------- */
+var drillMode = document.getElementById("drill-mode");
+var drillBoard = document.getElementById("drill-board");
+var drillArrows = document.getElementById("drill-arrows");
+var drillQEl = document.getElementById("drill-question");
+var drillFeed = document.getElementById("drill-feedback");
+var drillScore = document.getElementById("drill-score");
+var drillInput = document.getElementById("drill-answer");
+var drillState = { q: null, correct: 0, total: 0, answered: false };
+
+wireBoardPick(document.getElementById("drill-board-wrap"), drillBoard, function (sq) {
+  if (drillState.q && !drillState.answered) submitDrill(sq);
+});
+
+document.getElementById("drill-form").addEventListener("submit", function (ev) {
+  ev.preventDefault();
+  if (!drillState.q) return;
+  var ans = normalizeAnswer(drillInput.value);
+  if (!isAnswerFormat(ans)) {
+    drillFeed.className = "feedback bad";
+    drillFeed.textContent = "Type a square like e4 \u2014 one letter a\u2013h, one number 1\u20138.";
+    return;
+  }
+  submitDrill(ans);
+  drillInput.value = "";
+  drillInput.focus();
+});
+document.getElementById("drill-skip").addEventListener("click", function () {
+  if (drillState.q) { drillState.total++; nextDrill(); }
+});
+drillMode.addEventListener("change", nextDrill);
+
+function submitDrill(ans, quiet) {
+  if (drillState.answered && !quiet) return;
+  drillState.answered = true;
+  drillState.total++;
+  drillInput.value = "";
+  var q = drillState.q;
+  var right = ans === q.answer;
+  if (right) drillState.correct++;
+  drillScore.textContent = drillState.correct + " correct of " + drillState.total;
+  drillFeed.className = "feedback " + (right ? "good" : "bad");
+  drillFeed.textContent = right
+    ? "Correct \u2014 that is " + q.answer + "."
+    : (q.kind === "square"
+        ? "Not quite \u2014 the highlighted square is " + q.answer + "."
+        : "Not quite \u2014 \u201C" + lastDecodeSan + "\u201D lands on " + q.answer + ".");
+  drawDrill(true);
+  window.setTimeout(function () {
+    if (document.getElementById("panel-drills").hidden === false) nextDrill();
+  }, right ? 900 : 1800);
+}
+var lastDecodeSan = "";
+
+function nextDrill() {
+  var q = drillMode.value === "square" ? makeSquareQuestion() : makeDecodeQuestion();
+  if (q.kind === "decode") lastDecodeSan = q.prompt.match(/\u201C(.+?)\u201D/)[1];
+  drillState.q = q;
+  drillState.answered = false;
+  drillFeed.className = "feedback";
+  drillFeed.textContent = "";
+  drawDrill(false);
+  drillInput.focus();
+}
+function drawDrill(revealed) {
+  var q = drillState.q;
+  var opts = {
+    board: q.kind === "decode" ? q.board : null,
+    mark: q.kind === "square" ? q.mark : (revealed ? q.mark : null),
+    markTarget: revealed && q.kind === "decode" ? C.squareToIndex(q.answer) : null
+  };
+  boardDiv(drillBoard, opts);
+  if (revealed && q.kind === "decode") setArrow(drillArrows, q.revealFrom, C.squareToIndex(q.answer));
+  else setArrow(drillArrows, null, null);
+  drillQEl.textContent = q.prompt;
+}
+
+/* ---------- Read-a-game panel ---------- */
+var gameSelect = document.getElementById("game-select");
+var gameBoard = document.getElementById("game-board");
+var gameArrows = document.getElementById("game-arrows");
+var gameMovesEl = document.getElementById("game-moves");
+var gameMeta = document.getElementById("game-meta");
+var gamePosDesc = document.getElementById("game-position-desc");
+var gameIdx = 0, gamePly = -1;
+
+C.GAMES.forEach(function (g, i) {
+  var opt = document.createElement("option");
+  opt.value = String(i);
+  opt.textContent = g.title;
+  gameSelect.appendChild(opt);
+});
+gameSelect.addEventListener("change", function () {
+  gameIdx = parseInt(gameSelect.value, 10);
+  gamePly = -1;
+  renderGame();
+});
+document.getElementById("gm-first").addEventListener("click", function () { gamePly = -1; renderGame(); });
+document.getElementById("gm-prev").addEventListener("click", prevPly);
+document.getElementById("gm-next").addEventListener("click", nextPly);
+document.getElementById("gm-last").addEventListener("click", function () {
+  gamePly = replayCache[gameIdx].plies.length - 1; renderGame();
+});
+document.addEventListener("keydown", function (ev) {
+  if (document.getElementById("panel-games").hidden) return;
+  var t = ev.target && ev.target.tagName || "";
+  if (t === "INPUT" || t === "SELECT" || t === "TEXTAREA") return;
+  if (ev.key === "ArrowRight") { ev.preventDefault(); nextPly(); }
+  else if (ev.key === "ArrowLeft") { ev.preventDefault(); prevPly(); }
+  else if (ev.key === "Home") { ev.preventDefault(); gamePly = -1; renderGame(); }
+  else if (ev.key === "End") { ev.preventDefault(); gamePly = replayCache[gameIdx].plies.length - 1; renderGame(); }
+});
+function nextPly() {
+  var n = replayCache[gameIdx].plies.length;
+  if (gamePly < n - 1) gamePly++;
+  renderGame();
+}
+function prevPly() {
+  if (gamePly >= 0) gamePly--;
+  renderGame();
+}
+function renderGame() {
+  var game = C.GAMES[gameIdx];
+  var cache = replayCache[gameIdx];
+  var n = cache.plies.length;
+  if (gamePly >= n) gamePly = n - 1;
+  gameMeta.textContent = game.players + " \u00B7 " + game.place +
+    " \u00B7 Result " + game.result + (game.note ? " \u2014 " + game.note : "");
+  var snapIdx = gamePly;
+  var board = snapIdx === -1 ? C.initialBoard() : cache.plies[snapIdx].boardAfter;
+  var opts = { board: board };
+  if (snapIdx >= 0) opts.markTarget = cache.plies[snapIdx].to;
+  boardDiv(gameBoard, opts);
+  if (snapIdx >= 0) setArrow(gameArrows, cache.plies[snapIdx].from, cache.plies[snapIdx].to);
+  else setArrow(gameArrows, null, null);
+
+  gameMovesEl.textContent = null;
+  var moveNo = Math.floor(i / 2) + 1;
+  for (var i = 0; i < n; i++) {
+    var li = document.createElement("li");
+    var btn = document.createElement("button");
+    var side = cache.plies[i].side;
+    var no = Math.floor(i / 2) + 1;
+    btn.textContent = (side === "w" ? no + ". " : no + "\u2026 ") + cache.plies[i].san;
+    btn.addEventListener("click", function (i2) {
+      return function () { gamePly = i2; renderGame(); };
+    }(i));
+    if (i === snapIdx) btn.classList.add("current");
+    btn.setAttribute("aria-label", "Go to move " + no +
+      (side === "w" ? ", white plays " : ", black plays ") + cache.plies[i].san);
+    li.appendChild(btn);
+    gameMovesEl.appendChild(li);
+  }
+
+  var desc;
+  if (snapIdx === -1) desc = "Starting position. Press Next to play the first move.";
+  else {
+    var m = cache.plies[snapIdx];
+    desc = "Move " + (Math.floor(snapIdx / 2) + 1) + " \u2014 " +
+      (m.side === "w" ? "White" : "Black") + " plays " + m.san +
+      " (" + colorWordPiece(board, m) + " now stands on " + C.indexToSquare(m.to) + ")." +
+      (snapIdx === n - 1 ? " That was the last move." : "");
+  }
+  gamePosDesc.textContent = desc;
+}
+function colorWordPiece(board, m) {
+  var p = board[m.to];
+  var names = { K: "king", Q: "queen", R: "rook", B: "bishop", N: "knight", P: "pawn" };
+  var pieceName = names[m.castle ? "K" : (p ? p.t : "P")] || "piece";
+  return (m.side === "w" ? "the white " : "the black ") + pieceName;
+}
+
+/* ---------- Daily drill panel ---------- */
+var DAILY_SECONDS = 300;
+var dailyBoard = document.getElementById("daily-board");
+var dailyArrows = document.getElementById("daily-arrows");
+var dailyQEl = document.getElementById("daily-question");
+var dailyFeed = document.getElementById("daily-feedback");
+var dailyStatus = document.getElementById("daily-status");
+var dailySummary = document.getElementById("daily-summary");
+var dailyInput = document.getElementById("daily-answer");
+var dailySubmit = document.querySelector("#daily-form button[type=submit]");
+var dailyStartBtn = document.getElementById("daily-start");
+var dailyEndBtn = document.getElementById("daily-end");
+var daily = {
+  active: false, q: null, answered: false,
+  correct: 0, total: 0, Left: DAILY_SECONDS, tick: null, advanceTimer: null
+};
+
+function fmtTimer(sec) {
+  var m = Math.floor(sec / 60), s = sec % 60;
+  return m + ":" + (s < 10 ? "0" : "") + s;
+}
+function dailyStatusText() {
+  return "Timer: " + fmtTimer(daily.Left) + " \u00B7 " + daily.correct + " correct of " + daily.total;
+}
+function nextDailyQuestion() {
+  daily.q = Math.random() < 0.5 ? makeSquareQuestion() : makeDecodeQuestion();
+  daily.answered = false;
+  if (daily.q.kind === "decode") lastDecodeSan = daily.q.prompt.match(/\u201C(.+?)\u201D/)[1];
+  drawDaily(false);
+  dailyInput.focus();
+}
+function drawDaily(revealed) {
+  var q = daily.q;
+  boardDiv(dailyBoard, {
+    board: q.kind === "decode" ? q.board : null,
+    mark: q.kind === "square" ? q.mark : null,
+    markTarget: revealed && q.kind === "decode" ? C.squareToIndex(q.answer) : null
+  });
+  if (revealed && q.kind === "decode") setArrow(dailyArrows, q.revealFrom, C.squareToIndex(q.answer));
+  else setArrow(dailyArrows, null, null);
+  dailyQEl.textContent = q.prompt;
+}
+dailyStartBtn.addEventListener("click", function () {
+  daily.active = true; daily.correct = 0; daily.total = 0; daily.Left = DAILY_SECONDS;
+  dailyInput.disabled = false; dailySubmit.disabled = false; dailyEndBtn.disabled = false;
+  dailyStartBtn.disabled = true;
+  dailySummary.textContent = "";
+  nextDailyQuestion();
+  dailyStatus.textContent = dailyStatusText();
+  daily.tick = window.setInterval(function () {
+    daily.Left--;
+    dailyStatus.textContent = dailyStatusText();
+    if (daily.Left <= 0) finishDaily(true);
+  }, 1000);
+});
+dailyEndBtn.addEventListener("click", function () { finishDaily(false); });
+document.getElementById("daily-form").addEventListener("submit", function (ev) {
+  ev.preventDefault();
+  if (!daily.active || !daily.q || daily.answered) return;
+  var ans = normalizeAnswer(dailyInput.value);
+  if (!isAnswerFormat(ans)) {
+    dailyFeed.className = "feedback bad";
+    dailyFeed.textContent = "Type a square like e4 \u2014 one letter a\u2013h, one number 1\u20138.";
+    return;
+  }
+  answerDaily(ans);
+  dailyInput.value = "";
+});
+wireBoardPick(document.getElementById("daily-board-wrap"), dailyBoard, function (sq) {
+  if (daily.active && daily.q && !daily.answered) { answerDaily(sq); }
+});
+function answerDaily(ans) {
+  if (!daily.active || !daily.q || daily.answered) return;
+  daily.total++;
+  dailyInput.value = "";
+  var q = daily.q;
+  var right = ans === q.answer;
+  if (right) daily.correct++;
+  daily.answered = true;
+  dailyFeed.className = "feedback " + (right ? "good" : "bad");
+  dailyFeed.textContent = right
+    ? "Correct \u2014 " + q.answer + "."
+    : "Not quite \u2014 the answer was " + q.answer + ".";
+  drawDaily(true);
+  dailyStatus.textContent = dailyStatusText();
+  if (daily.Left > 0) {
+    daily.advanceTimer = window.setTimeout(function () {
+      if (daily.active && daily.Left > 0) { dailyFeed.textContent = ""; nextDailyQuestion(); }
+    }, right ? 800 : 1500);
+  }
+}
+function finishDaily(completed) {
+  if (!daily.active) return;
+  daily.active = false;
+  window.clearInterval(daily.tick);
+  window.clearTimeout(daily.advanceTimer);
+  dailyInput.disabled = true; dailySubmit.disabled = true; dailyEndBtn.disabled = true;
+  dailyStartBtn.disabled = false;
+  dailyQEl.textContent = "Session over.";
+  boardDiv(dailyBoard, { board: null });
+  setArrow(dailyArrows, null, null);
+  var msg = completed ? "Full five minutes done \u2014 nice." : "Session ended early.";
+  var acc = daily.total === 0 ? "" : " You scored " + daily.correct + " correct of " + daily.total + ".";
+  if (completed) {
+    var today = todayStr();
+    var state = loadState();
+    var next = C.updateStreak(state, today);
+    if (state.lastDate === today) next = { streak: state.streak, lastDate: today };
+    saveState(next);
+    updateStreakBadge();
+    msg += " Streak: " + next.streak + (next.streak === 1 ? " day" : " days") + "." + acc;
+  } else {
+    msg += " Only full five-minute sessions change the streak." + acc;
+  }
+  dailyFeed.className = "feedback good";
+  dailySummary.textContent = msg;
+}
+
+/* ---------- boot ---------- */
+var currentTab = "drills";
+function currentTabId() { return currentTab; }
+var replayCache = C.GAMES.map(function (g) { return C.replayGame(g.movetext); });
+(function init() {
+  updateStreakBadge();
+  showTab("drills");
+  renderGame();
+})();
+</script>
+</body>
+</html>

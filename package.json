@@ -1,0 +1,9 @@
+{
+  "name": "chess-notation-trainer-webapp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Offline single-file webapp that teaches chess notation by doing.",
+  "scripts": {
+    "test": "node test/test.js && node test/smoke.js"
+  }
+}
